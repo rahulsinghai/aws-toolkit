@@ -1,26 +1,26 @@
 package com.rahulsinghai.route
 
 import akka.actor.typed.scaladsl.AskPattern._
-import akka.actor.typed.{ActorRef, ActorSystem}
+import akka.actor.typed.{ ActorRef, ActorSystem }
 import akka.http.caching.scaladsl.Cache
-import akka.http.scaladsl.model.{StatusCodes, _}
-import akka.http.scaladsl.server.Directives.{complete, parameters, _}
+import akka.http.scaladsl.model.{ StatusCodes, _ }
+import akka.http.scaladsl.server.Directives.{ complete, parameters, _ }
 import akka.http.scaladsl.server.directives.CachingDirectives._
 import akka.http.scaladsl.server.directives.Credentials
 import akka.http.scaladsl.server.directives.PathDirectives.path
-import akka.http.scaladsl.server.{RequestContext, Route, RouteResult}
+import akka.http.scaladsl.server.{ RequestContext, Route, RouteResult }
 import akka.util.Timeout
 import com.amazonaws.services.ec2.model.InstanceType
 import com.rahulsinghai.actor.EC2Actor._
-import com.rahulsinghai.actor.ImageBuilderActor.ListImages
-import com.rahulsinghai.actor.{EC2Actor, ImageBuilderActor}
+import com.rahulsinghai.actor.ImageBuilderActor.{ AMIActionPerformed, ListImages }
+import com.rahulsinghai.actor.{ EC2Actor, ImageBuilderActor }
 import com.rahulsinghai.conf.AWSToolkitConfig
 import com.rahulsinghai.model._
 import com.rahulsinghai.util.ApiMessages
 import com.typesafe.scalalogging.StrictLogging
 
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
+import scala.concurrent.{ ExecutionContext, Future }
+import scala.util.{ Failure, Success, Try }
 import scala.xml.Elem
 
 class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand], ec2Actor: ActorRef[EC2Actor.EC2Command])(implicit val system: ActorSystem[_])
@@ -32,19 +32,31 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
   // If ask takes more time than this to complete the request is failed
   private implicit val timeout: Timeout = AWSToolkitConfig.akkaHttpServerRequestTimeout
 
-  def listAMIs(): Future[ActionPerformed] = imageBuilderActor.ask(ListImages)
+  def listAMIs(): Future[AMIActionPerformed] = imageBuilderActor.ask(ListImages)
 
-  def createEC2Instance(instanceToCreate: InstanceToCreate): Future[CreateEC2InstanceResponse] =
-    ec2Actor.ask(CreateEC2Instance(instanceToCreate, _))
+  def createEC2Instance(instanceToCreate: InstanceToCreate): Future[EC2SuccessResponse] =
+    ec2Actor.ask[EC2Response](CreateEC2Instance(instanceToCreate, _)).flatMap {
+      case EC2FailureResponse(throwable) => Future.failed(throwable) // https://doc.akka.io/docs/akka/current/typed/interaction-patterns.html#request-response-with-ask-from-outside-an-actor
+      case x: EC2SuccessResponse         => Future.successful(x)
+    }
 
-  def startEC2Instance(instanceId: String): Future[ActionPerformed] =
-    ec2Actor.ask(StartEC2Instance(instanceId, _))
+  def startEC2Instance(instanceId: String): Future[EC2SuccessResponse] =
+    ec2Actor.ask[EC2Response](StartEC2Instance(instanceId, _)).flatMap {
+      case EC2FailureResponse(throwable) => Future.failed(throwable)
+      case x: EC2SuccessResponse         => Future.successful(x)
+    }
 
-  def rebootEC2Instance(instanceId: String): Future[ActionPerformed] =
-    ec2Actor.ask(RebootEC2Instance(instanceId, _))
+  def rebootEC2Instance(instanceId: String): Future[EC2SuccessResponse] =
+    ec2Actor.ask[EC2Response](RebootEC2Instance(instanceId, _)).flatMap {
+      case EC2FailureResponse(throwable) => Future.failed(throwable)
+      case x: EC2SuccessResponse         => Future.successful(x)
+    }
 
-  def stopEC2Instance(instanceId: String): Future[ActionPerformed] =
-    ec2Actor.ask(StopEC2Instance(instanceId, _))
+  def stopEC2Instance(instanceId: String): Future[EC2SuccessResponse] =
+    ec2Actor.ask[EC2Response](StopEC2Instance(instanceId, _)).flatMap {
+      case EC2FailureResponse(throwable) => Future.failed(throwable)
+      case x: EC2SuccessResponse         => Future.successful(x)
+    }
 
   // Akka HTTP caching. Default settings are defined in application.conf
   // Use the request's URI as the cache's key
@@ -74,154 +86,154 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
           )
         )
       } ~
-      path("favicon.ico") {
-        cache(lfuRouteCache, keyerFunction)(
-          getFromResource("favicon.ico", MediaTypes.`image/x-icon`) // will look for the file favicon.ico inside your `resources` folder
-        )
-      } ~
-      path("ping") {
-        concat(
-          get {
-            cache(lfuRouteCache, keyerFunction) {
-              complete {
-                Try(HttpResponse(StatusCodes.OK, entity = HttpEntity("pong")))
-              }
-            }
-          }
-        )
-      } ~
-      path("status") {
-        concat(
+        path("favicon.ico") {
           cache(lfuRouteCache, keyerFunction)(
+            getFromResource("favicon.ico", MediaTypes.`image/x-icon`) // will look for the file favicon.ico inside your `resources` folder
+          )
+        } ~
+        path("ping") {
+          concat(
             get {
-              onComplete(getCurrentStatus) {
-                case Success(value) => complete((StatusCodes.OK, HttpEntity(ContentTypes.`application/json`, value)))
-                case Failure(ex)    => complete((StatusCodes.InternalServerError, s"An error occurred while fetching current status: ${ex.getMessage}"))
+              cache(lfuRouteCache, keyerFunction) {
+                complete {
+                  Try(HttpResponse(StatusCodes.OK, entity = HttpEntity("pong")))
+                }
               }
             }
           )
-        )
-      } ~
-      path("version") {
-        concat(
-          cache(lfuRouteCache, keyerFunction)(
-            get {
-              onComplete(getCurrentVersion) {
-                case Success(value) => complete((StatusCodes.OK, HttpEntity(ContentTypes.`application/json`, value)))
-                case Failure(ex)    => complete((StatusCodes.InternalServerError, s"An error occurred while fetching current version: ${ex.getMessage}"))
+        } ~
+        path("status") {
+          concat(
+            cache(lfuRouteCache, keyerFunction)(
+              get {
+                onComplete(getCurrentStatus) {
+                  case Success(value) => complete((StatusCodes.OK, HttpEntity(ContentTypes.`application/json`, value)))
+                  case Failure(ex)    => complete((StatusCodes.InternalServerError, s"An error occurred while fetching current status: ${ex.getMessage}"))
+                }
+              }
+            )
+          )
+        } ~
+        path("version") {
+          concat(
+            cache(lfuRouteCache, keyerFunction)(
+              get {
+                onComplete(getCurrentVersion) {
+                  case Success(value) => complete((StatusCodes.OK, HttpEntity(ContentTypes.`application/json`, value)))
+                  case Failure(ex)    => complete((StatusCodes.InternalServerError, s"An error occurred while fetching current version: ${ex.getMessage}"))
+                }
+              }
+            )
+          )
+        } ~
+        pathPrefix("ami") {
+          concat(
+            authenticateBasicPF(realm = "Big Data TLL user area", userPassAuthenticator) { _: String =>
+              path("list") {
+                concat(
+                  cache(lfuRouteCache, keyerFunction)(
+                    get {
+                      val listAMIsFuture: Future[AMIActionPerformed] = listAMIs()
+                      onComplete(listAMIsFuture) {
+                        case Success(actionPerformed: AMIActionPerformed) =>
+                          logger.info(s"These AMIs exist: ${actionPerformed.description}")
+                          complete((StatusCodes.OK, actionPerformed))
+                        case Failure(t: Throwable) =>
+                          val failureMessage: String = s"List images operation failed!\n${t.getLocalizedMessage}"
+                          logger.error(failureMessage, t)
+                          complete((StatusCodes.InternalServerError, failureMessage))
+                      }
+                    }
+                  )
+                )
               }
             }
           )
-        )
-      } ~
-      pathPrefix("ami") {
-        concat(
-          authenticateBasicPF(realm = "Big Data TLL user area", userPassAuthenticator) { _: String =>
-            path("list") {
+        } ~
+        pathPrefix("ec2") {
+          concat(
+            path("createInstance") {
               concat(
-                cache(lfuRouteCache, keyerFunction)(
-                  get {
-                    val listAMIsFuture: Future[ActionPerformed] = listAMIs()
-                    onComplete(listAMIsFuture) {
-                      case Success(actionPerformed: ActionPerformed) =>
-                        logger.info(s"These AMIs exist: ${actionPerformed.description}")
-                        complete((StatusCodes.OK, actionPerformed))
-                      case Failure(t: Throwable) =>
-                        val failureMessage: String = s"List images operation failed!\n${t.getLocalizedMessage}"
-                        logger.error(failureMessage, t)
-                        complete((StatusCodes.InternalServerError, failureMessage))
+                parameters(("imageId" ? "ami-032598fcc7e9d1c7a", "instanceType" ? "t2.micro", "minCount" ? 1, "maxCount" ? 1, "associatePublicIpAddress" ? true, "subnetId" ? "subnet-1c1d8d66", "groups" ? "sg-51c31834", "nameTag" ? "awsToolkitEx")) { (imageId, instanceType, minCount, maxCount, associatePublicIpAddress, subnetId, groups, nameTag) =>
+                  cache(lfuRouteCache, keyerFunction)(
+                    get {
+                      val eC2ResponseFuture: Future[EC2SuccessResponse] = createEC2Instance(InstanceToCreate(imageId, InstanceType.fromValue(instanceType), minCount, maxCount, associatePublicIpAddress, subnetId, groups, nameTag))
+                      onComplete(eC2ResponseFuture) {
+                        case Success(ec2SuccessResponse: EC2SuccessResponse) =>
+                          logger.info(ec2SuccessResponse.description)
+                          complete((StatusCodes.OK, ec2SuccessResponse))
+                        case Failure(t: Throwable) =>
+                          val failureMessage: String = s"EC2 instance creation failed!\n${t.getLocalizedMessage}"
+                          logger.error(failureMessage, t)
+                          complete((StatusCodes.InternalServerError, failureMessage))
+                      }
                     }
-                  }
-                )
+                  )
+                }
               )
-            }
-          }
-        )
-      } ~
-      pathPrefix("ec2") {
-        concat(
-          path("createInstance") {
-            concat(
-              parameters(("imageId" ? "ami-032598fcc7e9d1c7a", "instanceType" ? "t2.micro", "minCount" ? 1, "maxCount" ? 1, "associatePublicIpAddress" ? true, "subnetId" ? "subnet-1c1d8d66", "groups" ? "sg-51c31834", "nameTag" ? "awsToolkitEx")) { (imageId, instanceType, minCount, maxCount, associatePublicIpAddress, subnetId, groups, nameTag) =>
-                cache(lfuRouteCache, keyerFunction)(
-                  get {
-                    val createEC2InstanceResponseFuture: Future[CreateEC2InstanceResponse] = createEC2Instance(InstanceToCreate(imageId, InstanceType.fromValue(instanceType), minCount, maxCount, associatePublicIpAddress, subnetId, groups, nameTag))
-                    onComplete(createEC2InstanceResponseFuture) {
-                      case Success(createEC2InstanceResponse: CreateEC2InstanceResponse) =>
-                        logger.info(createEC2InstanceResponse.description)
-                        complete((StatusCodes.OK, createEC2InstanceResponse))
-                      case Failure(t: Throwable) =>
-                        val failureMessage: String = s"EC2 instance creation failed!\n${t.getLocalizedMessage}"
-                        logger.error(failureMessage, t)
-                        complete((StatusCodes.InternalServerError, failureMessage))
-                    }
+            } ~
+              path("startInstance") {
+                concat(
+                  parameter("instanceId") { instanceId =>
+                    cache(lfuRouteCache, keyerFunction)(
+                      get {
+                        val actionPerformedFuture: Future[EC2SuccessResponse] = startEC2Instance(instanceId)
+                        onComplete(actionPerformedFuture) {
+                          case Success(actionPerformed: EC2SuccessResponse) =>
+                            logger.info(s"${actionPerformed.description}")
+                            complete((StatusCodes.OK, actionPerformed))
+                          case Failure(t: Throwable) =>
+                            val failureMessage: String = s"EC2 instance with instanceId: $instanceId failed to start!\n${t.getLocalizedMessage}"
+                            logger.error(failureMessage, t)
+                            complete((StatusCodes.InternalServerError, failureMessage))
+                        }
+                      }
+                    )
+                  }
+                )
+              } ~
+              path("stopInstance") {
+                concat(
+                  parameter("instanceId") { instanceId =>
+                    cache(lfuRouteCache, keyerFunction)(
+                      get {
+                        val actionPerformedFuture: Future[EC2SuccessResponse] = stopEC2Instance(instanceId)
+                        onComplete(actionPerformedFuture) {
+                          case Success(actionPerformed: EC2SuccessResponse) =>
+                            logger.info(s"${actionPerformed.description}")
+                            complete((StatusCodes.OK, actionPerformed))
+                          case Failure(t: Throwable) =>
+                            val failureMessage: String = s"EC2 instance with instanceId: $instanceId failed to stop!\n${t.getLocalizedMessage}"
+                            logger.error(failureMessage, t)
+                            complete((StatusCodes.InternalServerError, failureMessage))
+                        }
+                      }
+                    )
+                  }
+                )
+              } ~
+              path("rebootInstance") {
+                concat(
+                  parameter("instanceId") { instanceId =>
+                    cache(lfuRouteCache, keyerFunction)(
+                      get {
+                        val actionPerformedFuture: Future[EC2SuccessResponse] = rebootEC2Instance(instanceId)
+                        onComplete(actionPerformedFuture) {
+                          case Success(actionPerformed: EC2SuccessResponse) =>
+                            logger.info(s"${actionPerformed.description}")
+                            complete((StatusCodes.OK, actionPerformed))
+                          case Failure(t: Throwable) =>
+                            val failureMessage: String = s"EC2 instance with instanceId: $instanceId failed to reboot!\n${t.getLocalizedMessage}"
+                            logger.error(failureMessage, t)
+                            complete((StatusCodes.InternalServerError, failureMessage))
+                        }
+                      }
+                    )
                   }
                 )
               }
-            )
-          } ~
-          path("startInstance") {
-            concat(
-              parameter("instanceId") { instanceId =>
-                cache(lfuRouteCache, keyerFunction)(
-                  get {
-                    val actionPerformedFuture: Future[ActionPerformed] = startEC2Instance(instanceId)
-                    onComplete(actionPerformedFuture) {
-                      case Success(actionPerformed: ActionPerformed) =>
-                        logger.info(s"${actionPerformed.description}")
-                        complete((StatusCodes.OK, actionPerformed))
-                      case Failure(t: Throwable) =>
-                        val failureMessage: String = s"EC2 instance with instanceId: $instanceId failed to start!\n${t.getLocalizedMessage}"
-                        logger.error(failureMessage, t)
-                        complete((StatusCodes.InternalServerError, failureMessage))
-                    }
-                  }
-                )
-              }
-            )
-          } ~
-          path("stopInstance") {
-            concat(
-              parameter("instanceId") { instanceId =>
-                cache(lfuRouteCache, keyerFunction)(
-                  get {
-                    val actionPerformedFuture: Future[ActionPerformed] = stopEC2Instance(instanceId)
-                    onComplete(actionPerformedFuture) {
-                      case Success(actionPerformed: ActionPerformed) =>
-                        logger.info(s"${actionPerformed.description}")
-                        complete((StatusCodes.OK, actionPerformed))
-                      case Failure(t: Throwable) =>
-                        val failureMessage: String = s"EC2 instance with instanceId: $instanceId failed to stop!\n${t.getLocalizedMessage}"
-                        logger.error(failureMessage, t)
-                        complete((StatusCodes.InternalServerError, failureMessage))
-                    }
-                  }
-                )
-              }
-            )
-          } ~
-          path("rebootInstance") {
-            concat(
-              parameter("instanceId") { instanceId =>
-                cache(lfuRouteCache, keyerFunction)(
-                  get {
-                    val actionPerformedFuture: Future[ActionPerformed] = rebootEC2Instance(instanceId)
-                    onComplete(actionPerformedFuture) {
-                      case Success(actionPerformed: ActionPerformed) =>
-                        logger.info(s"${actionPerformed.description}")
-                        complete((StatusCodes.OK, actionPerformed))
-                      case Failure(t: Throwable) =>
-                        val failureMessage: String = s"EC2 instance with instanceId: $instanceId failed to reboot!\n${t.getLocalizedMessage}"
-                        logger.error(failureMessage, t)
-                        complete((StatusCodes.InternalServerError, failureMessage))
-                    }
-                  }
-                )
-              }
-            )
-          }
-        )
-      }
+          )
+        }
     }
   )
   //#all-routes

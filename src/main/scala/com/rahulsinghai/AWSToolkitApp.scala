@@ -39,10 +39,10 @@ object AWSToolkitApp {
     //#server-bootstrapping
     val rootBehavior = Behaviors.setup[Nothing] { context =>
       val imageBuilderActor = context.spawn(ImageBuilderActor(), "ImageBuilderActor")
-      context.watch(imageBuilderActor)
+      //context.watch(imageBuilderActor)  // We don't want to terminate if any exception occurs in Child actors
 
       val ec2Actor = context.spawn(EC2Actor(), "EC2Actor")
-      context.watch(ec2Actor)
+      //context.watch(ec2Actor)
 
       val routes = new Routes(imageBuilderActor, ec2Actor)(context.system)
       startHttpServer(routes.routes, context.system)

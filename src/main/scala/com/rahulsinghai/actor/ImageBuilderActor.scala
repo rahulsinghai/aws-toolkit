@@ -1,12 +1,11 @@
 package com.rahulsinghai.actor
 
 import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, Behavior}
+import akka.actor.typed.{ ActorRef, Behavior }
 import com.amazonaws.auth.AWSStaticCredentialsProvider
-import com.amazonaws.services.imagebuilder.model.{ListImagesRequest, ListImagesResult}
-import com.amazonaws.services.imagebuilder.{AWSimagebuilder, AWSimagebuilderClientBuilder}
+import com.amazonaws.services.imagebuilder.model.{ ListImagesRequest, ListImagesResult }
+import com.amazonaws.services.imagebuilder.{ AWSimagebuilder, AWSimagebuilderClientBuilder }
 import com.rahulsinghai.conf.AWSToolkitConfig
-import com.rahulsinghai.model.ActionPerformed
 import com.typesafe.scalalogging.StrictLogging
 
 import scala.jdk.CollectionConverters._
@@ -14,9 +13,11 @@ import scala.jdk.CollectionConverters._
 object ImageBuilderActor extends StrictLogging {
 
   // actor protocol
+  final case class AMIActionPerformed(description: String)
+
   sealed trait ImageBuilderCommand
-  case class ListImages(replyTo: ActorRef[ActionPerformed]) extends ImageBuilderCommand
-  case class CreateNewImage(replyTo: ActorRef[ActionPerformed]) extends ImageBuilderCommand
+  case class ListImages(replyTo: ActorRef[AMIActionPerformed]) extends ImageBuilderCommand
+  case class CreateNewImage(replyTo: ActorRef[AMIActionPerformed]) extends ImageBuilderCommand
 
   // Set up the Amazon image builder client
   val awsImageBuilderClient: AWSimagebuilder = AWSimagebuilderClientBuilder.standard()
@@ -30,7 +31,7 @@ object ImageBuilderActor extends StrictLogging {
     Behaviors.receiveMessage {
       case ListImages(replyTo) =>
         val l: ListImagesResult = awsImageBuilderClient.listImages(new ListImagesRequest().withOwner("Self"))
-        replyTo ! ActionPerformed(l.getImageVersionList.asScala.map(_.toString).toList.mkString(", "))
+        replyTo ! AMIActionPerformed(l.getImageVersionList.asScala.map(_.toString).toList.mkString(", "))
         Behaviors.same
 
       case CreateNewImage(replyTo) =>
