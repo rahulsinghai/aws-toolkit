@@ -6,18 +6,18 @@ import akka.http.scaladsl.model.HttpMethod
 import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model.headers.HttpOrigin
 import akka.util.Timeout
+import ch.megard.akka.http.cors.scaladsl.model.HttpOriginMatcher
 import com.amazonaws.auth.BasicAWSCredentials
 import com.amazonaws.regions.Regions
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
-import ch.megard.akka.http.cors.scaladsl.model.HttpOriginMatcher
 
 import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 object AWSToolkitConfig extends StrictLogging {
 
-  import scala.jdk.CollectionConverters._
 
   def getPotentiallyInfiniteDuration(durationString: String): FiniteDuration = {
     val durationObject = durationString match {
@@ -38,7 +38,7 @@ object AWSToolkitConfig extends StrictLogging {
   lazy val awsCredentials = new BasicAWSCredentials(awsAccessKey, awsSecretKey)
 
   private lazy val regionName = Try(config.getString("aws.region")).getOrElse("eu-west-2")
-  lazy val region = Regions.fromName(regionName)
+  lazy val region: Regions = Regions.fromName(regionName)
 
   private val akkaHttpServerConfig: Config = config.getConfig("akka.http.server")
 
@@ -49,5 +49,6 @@ object AWSToolkitConfig extends StrictLogging {
 
   lazy val corsAllowedOrigins: HttpOriginMatcher = Try(HttpOriginMatcher(HttpOrigin(config.getString("cors.allowed-origins")))).getOrElse(HttpOriginMatcher.*)
   lazy val corsAllowedMethods: List[HttpMethod] = Try(config.getStringList("cors.allowed-methods").asScala.toList
-    .map(_.toUpperCase).map(y => httpMethodMap.getOrElse(y, null))).getOrElse(List(GET))
+    .map(y => httpMethodMap.getOrElse(y.toUpperCase, GET))
+  ).getOrElse(List(GET))
 }

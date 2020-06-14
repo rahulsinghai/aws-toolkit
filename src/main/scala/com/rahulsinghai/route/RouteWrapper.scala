@@ -1,6 +1,6 @@
 package com.rahulsinghai.route
 
-import java.util.Random
+import java.security.SecureRandom
 
 import akka.http.scaladsl.coding.Gzip
 import akka.http.scaladsl.model._
@@ -14,6 +14,7 @@ import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
 import ch.megard.akka.http.cors.scaladsl.settings.CorsSettings
 import com.rahulsinghai.conf.AWSToolkitConfig
 import com.typesafe.scalalogging.StrictLogging
+import org.apache.commons.codec.binary.Hex
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
@@ -22,7 +23,15 @@ trait RouteWrapper extends StrictLogging {
 
   implicit val ec: ExecutionContext
 
-  val rand = new Random()
+  def generateSecretToken: String = {
+    val secRandom: SecureRandom = new SecureRandom()
+
+    val result = new Array[Byte](32)
+    secRandom.nextBytes(result)
+    Hex.encodeHexString(result)
+  }
+
+  val rand: String = generateSecretToken
 
   /**
    * This function is called whenever a request is received.
@@ -77,7 +86,7 @@ trait RouteWrapper extends StrictLogging {
    */
   def idAndTimeRequest(ctx: RequestContext, ip: RemoteAddress): Try[RouteResult] => Unit = {
     val requestTimestamp = System.currentTimeMillis
-    val id: String = requestTimestamp.toString + scala.math.abs(rand.nextInt).toString
+    val id: String = requestTimestamp.toString + rand
     logger.info(s"id: $id, Request received: [${ctx.request.method.name} ${ctx.request.uri}], remote address: [${ip.toOption.getOrElse("")}]")
 
     // A function of type: Try[RouteResult] => Unit
@@ -113,7 +122,7 @@ trait RouteWrapper extends StrictLogging {
       .mapRejectionResponse {
         case res @ HttpResponse(_, _, ent: HttpEntity.Strict, _) =>
           // since all Akka default rejection responses are Strict this will handle all rejections
-          val message = ent.data.decodeString(ent.contentType.charsetOption.get.value).replaceAll("\"", """\"""")
+          val message = ent.data.decodeString(ent.contentType.charsetOption.getOrElse(HttpCharsets.`UTF-8`).value).replaceAll("\"", """\"""")
 
           // we copy the response in order to keep all headers and status code, wrapping the message as hand rolled JSON
           // you could the entity using your favourite marshalling library (e.g. spray json or anything else)
@@ -125,16 +134,15 @@ trait RouteWrapper extends StrictLogging {
 
   def wrapRoutes(dsl: Route): Route = Route.seal(
     cors(CorsSettings.defaultSettings.withAllowedOrigins(AWSToolkitConfig.corsAllowedOrigins).withAllowedMethods(AWSToolkitConfig.corsAllowedMethods)) {
-      aroundRequest(idAndTimeRequest) {
-        dsl
-      }
+      aroundRequest(idAndTimeRequest)
+      dsl
     }
   )
 
   def wrapRoutesWithGzip(dsl: Route): Route = Route.seal(
     cors(CorsSettings.defaultSettings.withAllowedOrigins(AWSToolkitConfig.corsAllowedOrigins).withAllowedMethods(AWSToolkitConfig.corsAllowedMethods)) {
       aroundRequest(idAndTimeRequest) {
-        (encodeResponseWith(Gzip)(dsl))
+        encodeResponseWith(Gzip)(dsl)
       }
     }
   )

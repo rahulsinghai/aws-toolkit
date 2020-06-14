@@ -20,7 +20,8 @@ import com.rahulsinghai.util.ApiMessages
 import com.typesafe.scalalogging.StrictLogging
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success}
+import scala.util.control.NonFatal
+import scala.util.{Failure, Success, Try}
 import scala.xml.Elem
 
 class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand], ec2Actor: ActorRef[EC2Actor.EC2Command])(implicit val system: ActorSystem[_])
@@ -68,13 +69,7 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
           cache(lfuRouteCache, keyerFunction)(
             get {
               complete {
-                try {
-                  HttpResponse(entity = HttpEntity(ContentTypes.`text/html(UTF-8)`, index_html.mkString))
-                } catch {
-                  case ex: Throwable =>
-                    logger.error(ex.getMessage)
-                    HttpResponse(StatusCodes.InternalServerError, entity = s"Error encountered!")
-                }
+                Try(HttpResponse(entity = HttpEntity(ContentTypes.`text/html(UTF-8)`, indexHtml.mkString)))
               }
             }
           )
@@ -93,7 +88,7 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
                 try {
                   HttpResponse(StatusCodes.OK, entity = HttpEntity("pong"))
                 } catch {
-                  case ex: Throwable =>
+                  case NonFatal(ex) =>
                     logger.error(ex.getMessage)
                     HttpResponse(StatusCodes.InternalServerError, entity = s"Error found")
                 }
@@ -229,19 +224,18 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
               }
             )
           } ~
-          path("startInstances") {
+          path("startInstance") {
             concat(
-              parameter("instanceIds".as(CsvSeq[String])) { instanceIds =>
+              parameter("instanceId") { instanceId =>
                 cache(lfuRouteCache, keyerFunction)(
                   get {
-                    // TODO Call/Collect response for each instanceId
-                    val actionPerformedFuture: Future[ActionPerformed] = startEC2Instance(instanceIds.head)
+                    val actionPerformedFuture: Future[ActionPerformed] = startEC2Instance(instanceId)
                     onComplete(actionPerformedFuture) {
                       case Success(actionPerformed: ActionPerformed) =>
                         logger.info(s"${actionPerformed.description}")
                         complete((StatusCodes.OK, actionPerformed))
                       case Failure(t: Throwable) =>
-                        val failureMessage: String = s"EC2 instance with instanceId: ${instanceIds.head} failed to start!\n${t.getLocalizedMessage}"
+                        val failureMessage: String = s"EC2 instance with instanceId: $instanceId failed to start!\n${t.getLocalizedMessage}"
                         logger.error(failureMessage, t)
                         complete((StatusCodes.InternalServerError, failureMessage))
                     }
@@ -250,19 +244,18 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
               }
             )
           } ~
-          path("stopInstances") {
+          path("stopInstance") {
             concat(
-              parameter("instanceIds".as(CsvSeq[String])) { instanceIds =>
+              parameter("instanceId") { instanceId =>
                 cache(lfuRouteCache, keyerFunction)(
                   get {
-                    // TODO Call/Collect response for each instanceId
-                    val actionPerformedFuture: Future[ActionPerformed] = stopEC2Instance(instanceIds.head)
+                    val actionPerformedFuture: Future[ActionPerformed] = stopEC2Instance(instanceId)
                     onComplete(actionPerformedFuture) {
                       case Success(actionPerformed: ActionPerformed) =>
                         logger.info(s"${actionPerformed.description}")
                         complete((StatusCodes.OK, actionPerformed))
                       case Failure(t: Throwable) =>
-                        val failureMessage: String = s"EC2 instance with instanceId: ${instanceIds.head} failed to stop!\n${t.getLocalizedMessage}"
+                        val failureMessage: String = s"EC2 instance with instanceId: $instanceId failed to stop!\n${t.getLocalizedMessage}"
                         logger.error(failureMessage, t)
                         complete((StatusCodes.InternalServerError, failureMessage))
                     }
@@ -271,19 +264,18 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
               }
             )
           } ~
-          path("rebootInstances") {
+          path("rebootInstance") {
             concat(
-              parameter("instanceIds".as(CsvSeq[String])) { instanceIds =>
+              parameter("instanceId") { instanceId =>
                 cache(lfuRouteCache, keyerFunction)(
                   get {
-                    // TODO Call/Collect response for each instanceId
-                    val actionPerformedFuture: Future[ActionPerformed] = rebootEC2Instance(instanceIds.head)
+                    val actionPerformedFuture: Future[ActionPerformed] = rebootEC2Instance(instanceId)
                     onComplete(actionPerformedFuture) {
                       case Success(actionPerformed: ActionPerformed) =>
                         logger.info(s"${actionPerformed.description}")
                         complete((StatusCodes.OK, actionPerformed))
                       case Failure(t: Throwable) =>
-                        val failureMessage: String = s"EC2 instance with instanceId: ${instanceIds.head} failed to reboot!\n${t.getLocalizedMessage}"
+                        val failureMessage: String = s"EC2 instance with instanceId: $instanceId failed to reboot!\n${t.getLocalizedMessage}"
                         logger.error(failureMessage, t)
                         complete((StatusCodes.InternalServerError, failureMessage))
                     }
@@ -299,7 +291,7 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
   //#all-routes
 
   // Helpers //
-  lazy val index_html: Elem =
+  lazy val indexHtml: Elem =
     <html>
       <body>
         <h1>Welcome to <i>AWS toolkit</i>!</h1>
@@ -318,9 +310,9 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
         <br/>
         <ul>
           <li>Create EC2 instance: <a href="/ec2/createInstance?imageId=prod_dc1%26instanceType=%26minCount=1%26maxCount=1%26associatePublicIpAddress=true%26subnetId=0.0.0.0%26groups=ss%26nameTag=prod_dc2">/ec2/createInstance?imageId=prod_dc1%26instanceType=%26minCount=1%26maxCount=1%26associatePublicIpAddress=true%26subnetId=0.0.0.0%26groups=ss%26nameTag=prod_dc2</a></li>
-          <li>Start EC2 instances: <a href="/ec2/startInstances?instanceIds=i-1234567890abcdef0">/ec2/startInstances?instanceIds=i-1234567890abcdef0</a></li>
-          <li>Stop EC2 instances: <a href="/ec2/stopInstances?instanceIds=i-1234567890abcdef0">/ec2/stopInstances?instanceIds=i-1234567890abcdef0</a></li>
-          <li>Reboot EC2 instances: <a href="/ec2/rebootInstances?instanceIds=i-1234567890abcdef0">/ec2/rebootInstances?instanceIds=i-1234567890abcdef0</a></li>
+          <li>Start EC2 instance: <a href="/ec2/startInstance?instanceIds=i-1234567890abcdef0">/ec2/startInstance?instanceId=i-1234567890abcdef0</a></li>
+          <li>Stop EC2 instance: <a href="/ec2/stopInstance?instanceIds=i-1234567890abcdef0">/ec2/stopInstance?instanceId=i-1234567890abcdef0</a></li>
+          <li>Reboot EC2 instance: <a href="/ec2/rebootInstance?instanceIds=i-1234567890abcdef0">/ec2/rebootInstance?instanceId=i-1234567890abcdef0</a></li>
         </ul>
       </body>
     </html>

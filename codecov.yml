@@ -1,0 +1,9 @@
+codecov:
+  token: 4ef88c4e-0e02-4408-81b2-3fc94c9cec98
+coverage:
+  notify:
+    gitter:
+      default:
+        url: "https://webhooks.gitter.im/e/b1dbf509a6ec8ab8808a"
+        threshold: 1%
+  range: "50...100"
