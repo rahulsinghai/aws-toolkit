@@ -86,13 +86,7 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
           get {
             cache(lfuRouteCache, keyerFunction) {
               complete {
-                try {
-                  HttpResponse(StatusCodes.OK, entity = HttpEntity("pong"))
-                } catch {
-                  case NonFatal(ex) =>
-                    logger.error(ex.getMessage)
-                    HttpResponse(StatusCodes.InternalServerError, entity = s"Error found")
-                }
+                Try(HttpResponse(StatusCodes.OK, entity = HttpEntity("pong")))
               }
             }
           }
@@ -141,60 +135,6 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
                     }
                   }
                 )
-              )
-            } ~
-            path("startInstance") {
-              concat(
-                parameter("instanceId") { instanceId =>
-                  get {
-                    val actionPerformedFuture: Future[ActionPerformed] = startEC2Instance(instanceId)
-                    onComplete(actionPerformedFuture) {
-                      case Success(actionPerformed: ActionPerformed) =>
-                        logger.info(s"${actionPerformed.description}")
-                        complete((StatusCodes.OK, actionPerformed))
-                      case Failure(t: Throwable) =>
-                        val failureMessage: String = s"EC2 instance with instanceId: $instanceId failed to start!\n${t.getLocalizedMessage}"
-                        logger.error(failureMessage, t)
-                        complete((StatusCodes.InternalServerError, failureMessage))
-                    }
-                  }
-                }
-              )
-            } ~
-            path("stopInstance") {
-              concat(
-                parameter("instanceId") { instanceId =>
-                  get {
-                    val actionPerformedFuture: Future[ActionPerformed] = stopEC2Instance(instanceId)
-                    onComplete(actionPerformedFuture) {
-                      case Success(actionPerformed: ActionPerformed) =>
-                        logger.info(s"${actionPerformed.description}")
-                        complete((StatusCodes.OK, actionPerformed))
-                      case Failure(t: Throwable) =>
-                        val failureMessage: String = s"EC2 instance with instanceId: $instanceId failed to stop!\n${t.getLocalizedMessage}"
-                        logger.error(failureMessage, t)
-                        complete((StatusCodes.InternalServerError, failureMessage))
-                    }
-                  }
-                }
-              )
-            } ~
-            path("rebootInstances") {
-              concat(
-                parameter("instanceId".as(CsvSeq[String])) { instanceId =>
-                  get {
-                    val actionPerformedFuture: Future[ActionPerformed] = rebootEC2Instance(instanceId.head)
-                    onComplete(actionPerformedFuture) {
-                      case Success(actionPerformed: ActionPerformed) =>
-                        logger.info(s"${actionPerformed.description}")
-                        complete((StatusCodes.OK, actionPerformed))
-                      case Failure(t: Throwable) =>
-                        val failureMessage: String = s"EC2 instance with instanceId: ${instanceId.head} failed to reboot!\n${t.getLocalizedMessage}"
-                        logger.error(failureMessage, t)
-                        complete((StatusCodes.InternalServerError, failureMessage))
-                    }
-                  }
-                }
               )
             }
           }
