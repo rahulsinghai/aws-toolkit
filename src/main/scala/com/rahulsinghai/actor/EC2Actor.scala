@@ -67,7 +67,7 @@ object EC2Actor extends StrictLogging {
           .withTags(new Tag("Name", instanceToCreate.nameTag))
         ec2Client.createTags(createTagsRequest)
 
-        val description: String = s"EC2 Instance Id: $instanceId, private IP: $privateIP, public IP: $publicIP"
+        val description: String = s"Successfully created EC2 instance: ${instanceToCreate.nameTag} with instanceId: $instanceId, private IP: $privateIP, public IP: $publicIP based on AMI: ${instanceToCreate.imageId}."
         logger.info(description)
         replyTo ! CreateEC2InstanceResponse(instanceId, description)
         Behaviors.same

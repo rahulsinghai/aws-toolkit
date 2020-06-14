@@ -11,6 +11,7 @@ import akka.http.scaladsl.server.directives.PathDirectives.path
 import akka.http.scaladsl.server.{RequestContext, Route, RouteResult}
 import akka.http.scaladsl.unmarshalling.PredefinedFromStringUnmarshallers.CsvSeq
 import akka.util.Timeout
+import com.amazonaws.services.ec2.model.InstanceType
 import com.rahulsinghai.actor.EC2Actor._
 import com.rahulsinghai.actor.ImageBuilderActor.ListImages
 import com.rahulsinghai.actor.{EC2Actor, ImageBuilderActor}
@@ -203,13 +204,13 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
         concat(
           path("createInstance") {
             concat(
-              parameters(("imageId", "instanceType", "minCount" ? 1, "maxCount" ? 1, "associatePublicIpAddress" ? true, "subnetId" ? "0.0.0.0", "groups" ? "", "nameTag" ? "")) { (imageId, instanceType, minCount, maxCount, associatePublicIpAddress, subnetId, groups, nameTag) =>
+              parameters(("imageId", "instanceType" ? "t2.micro", "minCount" ? 1, "maxCount" ? 1, "associatePublicIpAddress" ? true, "subnetId" ? "0.0.0.0", "groups" ? "", "nameTag" ? "")) { (imageId, instanceType, minCount, maxCount, associatePublicIpAddress, subnetId, groups, nameTag) =>
                 cache(lfuRouteCache, keyerFunction)(
                   get {
-                    val createEC2InstanceResponseFuture: Future[CreateEC2InstanceResponse] = createEC2Instance(InstanceToCreate(imageId, instanceType, minCount, maxCount, associatePublicIpAddress, subnetId, groups, nameTag))
+                    val createEC2InstanceResponseFuture: Future[CreateEC2InstanceResponse] = createEC2Instance(InstanceToCreate(imageId, InstanceType.fromValue(instanceType), minCount, maxCount, associatePublicIpAddress, subnetId, groups, nameTag))
                     onComplete(createEC2InstanceResponseFuture) {
                       case Success(createEC2InstanceResponse: CreateEC2InstanceResponse) =>
-                        logger.info(s"EC2 instance created.\n${createEC2InstanceResponse.description}")
+                        logger.info(createEC2InstanceResponse.description)
                         complete((StatusCodes.OK, createEC2InstanceResponse))
                       case Failure(t: Throwable) =>
                         val failureMessage: String = s"EC2 instance creation failed!\n${t.getLocalizedMessage}"
@@ -306,7 +307,7 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
         </ul>
         <br/>
         <ul>
-          <li>Create EC2 instance: <a href="/ec2/createInstance?imageId=prod_dc1%26instanceType=%26minCount=1%26maxCount=1%26associatePublicIpAddress=true%26subnetId=0.0.0.0%26groups=ss%26nameTag=prod_dc2">/ec2/createInstance?imageId=prod_dc1%26instanceType=%26minCount=1%26maxCount=1%26associatePublicIpAddress=true%26subnetId=0.0.0.0%26groups=ss%26nameTag=prod_dc2</a></li>
+          <li>Create EC2 instance: <a href="/ec2/createInstance?imageId=prod_dc1%26instanceType=t2.micro%26minCount=1%26maxCount=1%26associatePublicIpAddress=true%26subnetId=0.0.0.0%26groups=ss%26nameTag=awsToolkitExample1">/ec2/createInstance?imageId=prod_dc1%26instanceType=%26minCount=1%26maxCount=1%26associatePublicIpAddress=true%26subnetId=0.0.0.0%26groups=ss%26nameTag=prod_dc2</a></li>
           <li>Start EC2 instance: <a href="/ec2/startInstance?instanceId=i-1234567890abcdef0">/ec2/startInstance?instanceId=i-1234567890abcdef0</a></li>
           <li>Stop EC2 instance: <a href="/ec2/stopInstance?instanceId=i-1234567890abcdef0">/ec2/stopInstance?instanceId=i-1234567890abcdef0</a></li>
           <li>Reboot EC2 instance: <a href="/ec2/rebootInstance?instanceId=i-1234567890abcdef0">/ec2/rebootInstance?instanceId=i-1234567890abcdef0</a></li>
