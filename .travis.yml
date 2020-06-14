@@ -11,7 +11,7 @@ language: scala
 
 script:
   - sbt ++$TRAVIS_SCALA_VERSION compile test:compile
-  - sbt ++$TRAVIS_SCALA_VERSION -Dakka.test.timefactor=2 'set concurrentRestrictions in Global += Tags.limit(Tags.Test, 1)' test
+  - sbt ++$TRAVIS_SCALA_VERSION -Dakka.test.timefactor=2 'set concurrentRestrictions in Global += Tags.limit(Tags.Test, 1)' clean coverage test coverageReport
 
   # Trick to avoid unnecessary cache updates
   - find $HOME/.sbt -name "*.lock" | xargs rm
@@ -20,9 +20,11 @@ scala:
   - 2.13.2
 
 jdk:
-  - oraclejdk8
   - openjdk8
 
 notifications:
   email:
     - singrahu@gmail.com
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
