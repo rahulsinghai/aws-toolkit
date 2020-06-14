@@ -9,7 +9,6 @@ import akka.http.scaladsl.server.directives.CachingDirectives._
 import akka.http.scaladsl.server.directives.Credentials
 import akka.http.scaladsl.server.directives.PathDirectives.path
 import akka.http.scaladsl.server.{RequestContext, Route, RouteResult}
-import akka.http.scaladsl.unmarshalling.PredefinedFromStringUnmarshallers.CsvSeq
 import akka.util.Timeout
 import com.amazonaws.services.ec2.model.InstanceType
 import com.rahulsinghai.actor.EC2Actor._
@@ -21,7 +20,6 @@ import com.rahulsinghai.util.ApiMessages
 import com.typesafe.scalalogging.StrictLogging
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import scala.xml.Elem
 
@@ -144,7 +142,7 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
         concat(
           path("createInstance") {
             concat(
-              parameters(("imageId", "instanceType" ? "t2.micro", "minCount" ? 1, "maxCount" ? 1, "associatePublicIpAddress" ? true, "subnetId" ? "0.0.0.0", "groups" ? "", "nameTag" ? "")) { (imageId, instanceType, minCount, maxCount, associatePublicIpAddress, subnetId, groups, nameTag) =>
+              parameters(("imageId" ? "ami-032598fcc7e9d1c7a", "instanceType" ? "t2.micro", "minCount" ? 1, "maxCount" ? 1, "associatePublicIpAddress" ? true, "subnetId" ? "subnet-1c1d8d66", "groups" ? "sg-51c31834", "nameTag" ? "awsToolkitEx")) { (imageId, instanceType, minCount, maxCount, associatePublicIpAddress, subnetId, groups, nameTag) =>
                 cache(lfuRouteCache, keyerFunction)(
                   get {
                     val createEC2InstanceResponseFuture: Future[CreateEC2InstanceResponse] = createEC2Instance(InstanceToCreate(imageId, InstanceType.fromValue(instanceType), minCount, maxCount, associatePublicIpAddress, subnetId, groups, nameTag))
@@ -247,7 +245,7 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
         </ul>
         <br/>
         <ul>
-          <li>Create EC2 instance: <a href="/ec2/createInstance?imageId=prod_dc1%26instanceType=t2.micro%26minCount=1%26maxCount=1%26associatePublicIpAddress=true%26subnetId=0.0.0.0%26groups=ss%26nameTag=awsToolkitExample1">/ec2/createInstance?imageId=prod_dc1%26instanceType=%26minCount=1%26maxCount=1%26associatePublicIpAddress=true%26subnetId=0.0.0.0%26groups=ss%26nameTag=prod_dc2</a></li>
+          <li>Create EC2 instance: <a href="/ec2/createInstance?imageId=ami-032598fcc7e9d1c7a&amp;instanceType=t2.micro&amp;minCount=1&amp;maxCount=1&amp;associatePublicIpAddress=true&amp;subnetId=subnet-1c1d8d66&amp;groups=sg-51c31834&amp;nameTag=awsToolkitEx">/ec2/createInstance?imageId=ami-032598fcc7e9d1c7a&amp;instanceType=t2.micro&amp;minCount=1&amp;maxCount=1&amp;associatePublicIpAddress=true&amp;subnetId=subnet-1c1d8d66&amp;groups=sg-51c31834&amp;nameTag=awsToolkitEx</a></li>
           <li>Start EC2 instance: <a href="/ec2/startInstance?instanceId=i-1234567890abcdef0">/ec2/startInstance?instanceId=i-1234567890abcdef0</a></li>
           <li>Stop EC2 instance: <a href="/ec2/stopInstance?instanceId=i-1234567890abcdef0">/ec2/stopInstance?instanceId=i-1234567890abcdef0</a></li>
           <li>Reboot EC2 instance: <a href="/ec2/rebootInstance?instanceId=i-1234567890abcdef0">/ec2/rebootInstance?instanceId=i-1234567890abcdef0</a></li>
