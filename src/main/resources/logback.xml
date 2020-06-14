@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<configuration scan="true" scanPeriod="6000 seconds">
+    <!-- This is a development logging configuration that logs to standard out, for an example of a production
+        logging config, see the Akka docs: https://doc.akka.io/docs/akka/2.6/typed/logging.html#logback -->
+    <appender name="ConsoleAppender" target="System.out" class="ch.qos.logback.core.ConsoleAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>DEBUG</level>
+        </filter>
+        <!-- On Windows machines setting withJansi to true enables ANSI color code interpretation by the Jansi library.
+         This requires org.fusesource.jansi:jansi on the class path.
+         Note that Unix-based operating systems such as Linux and Mac OS X support ANSI color codes by default.
+
+         NOTE: While logback recommends to use Jansi library for Windows but it fails if used with Surefire plug-in.
+         Check https://jira.qos.ch/browse/LOGBACK-762
+         Better to not use JANSI when using surefire plugin and use a different Windows console with ANSI colors handling.
+         It could be, for example, ansicon or conemu.
+        <withJansi>true</withJansi>
+        <encoder>
+            <pattern>%yellow(%date{ISO8601}) %highlight(%-5level) %cyan([%-60.60logger]) %magenta([%thread]) - %msg%n%throwable</pattern>
+        </encoder-->
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp/>
+                <pattern>
+                    <pattern>
+                        {
+                        "logger": "%logger",
+                        "level": "%level",
+                        "thread": "%thread",
+                        "message": "#tryJson{%message}"
+                        }
+                    </pattern>
+                </pattern>
+            </providers>
+        </encoder>
+        <target>System.out</target>
+    </appender>
+
+    <appender name="StdErrorAppender" class="ch.qos.logback.core.ConsoleAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>ERROR</level>
+        </filter>
+        <encoder>
+            <pattern>%yellow(%date{ISO8601}) %highlight(%-5level) %cyan([%-50.50logger]) %magenta([%thread]) [%X{sessionid}]-[%X{user}] %caller{1} - %msg%n%throwable</pattern>
+        </encoder>
+        <target>System.err</target>
+    </appender>
+
+    <appender name="AsyncJSONLogfileAppender" class="ch.qos.logback.classic.AsyncAppender">
+        <appender class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <!-- path to your log file, where you want to store logs -->
+            <file>./logs/aws-toolkit.log.json</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <!-- rollover daily; unzip using `gunzip <filename.gz>` -->
+                <fileNamePattern>./logs/aws-toolkit-%d{yyyy-MM-dd}.%i.log.json.gz</fileNamePattern>
+                <!-- each file should be at most 100MB, keep 30 days worth of history, but at most 1GB -->
+                <maxFileSize>100MB</maxFileSize>
+                <maxHistory>30</maxHistory>
+                <totalSizeCap>1GB</totalSizeCap>
+            </rollingPolicy>
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <customFields>{"microservice":"aws-toolkit"}</customFields>
+            </encoder>
+        </appender>
+    </appender>
+
+    <!-- Once an event reaches a logger with its additivity set to false the event will not be passed to any of its parent loggers (e.g., root), regardless of their additivity setting. -->
+    <!--logger name="org.apache.zookeeper" level="WARN" additivity="false">
+        <appender-ref ref="ConsoleAppender" />
+        <appender-ref ref="AsyncJSONLogfileAppender" />
+    </logger-->
+
+    <!-- level attribute is not necessary since the level of the root level is set to DEBUG by default -->
+    <!-- ALL < TRACE < DEBUG < INFO < WARN < ERROR < OFF -->
+    <root level="INFO">
+        <appender-ref ref="ConsoleAppender"/>
+        <appender-ref ref="AsyncJSONLogfileAppender"/>
+    </root>
+</configuration>
