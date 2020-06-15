@@ -1,15 +1,20 @@
 package com.rahulsinghai
 
-import akka.actor.typed.ActorSystem
+import java.net.InetSocketAddress
+
+import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.scaladsl.adapter._
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Route
-import com.rahulsinghai.actor.{ EC2Actor, ImageBuilderActor }
+import com.amazonaws.auth.AWSStaticCredentialsProvider
+import com.amazonaws.services.ec2.{AmazonEC2, AmazonEC2ClientBuilder}
+import com.rahulsinghai.actor.{EC2Actor, ImageBuilderActor, SubnetActor, VPCActor}
 import com.rahulsinghai.conf.AWSToolkitConfig
 import com.rahulsinghai.route.Routes
 
-import scala.util.{ Failure, Success }
+import scala.concurrent.Future
+import scala.util.{Failure, Success}
 
 //#main-class
 object AWSToolkitApp {
@@ -24,10 +29,10 @@ object AWSToolkitApp {
     implicit val classicSystem: akka.actor.ActorSystem = system.toClassic
     import system.executionContext
 
-    val futureBinding = Http().bindAndHandle(routes, AWSToolkitConfig.akkaHttpServerHttpInterface, AWSToolkitConfig.akkaHttpServerHttpPort)
+    val futureBinding: Future[Http.ServerBinding] = Http().bindAndHandle(routes, AWSToolkitConfig.akkaHttpServerHttpInterface, AWSToolkitConfig.akkaHttpServerHttpPort)
     futureBinding.onComplete {
       case Success(binding) =>
-        val address = binding.localAddress
+        val address: InetSocketAddress = binding.localAddress
         system.log.info("Server online at http://{}:{}/", address.getHostString, address.getPort)
       case Failure(ex) =>
         system.log.error("Failed to bind HTTP endpoint, terminating system", ex)
@@ -37,14 +42,21 @@ object AWSToolkitApp {
 
   def main(args: Array[String]): Unit = {
     //#server-bootstrapping
-    val rootBehavior = Behaviors.setup[Nothing] { context =>
+    val rootBehavior: Behavior[Nothing] = Behaviors.setup[Nothing] { context =>
+      // Set up the Amazon ec2 client
+      val ec2Client: AmazonEC2 = AmazonEC2ClientBuilder.standard()
+        .withCredentials(new AWSStaticCredentialsProvider(AWSToolkitConfig.awsCredentials))
+        .withRegion(AWSToolkitConfig.region)
+        .build
+
       val imageBuilderActor = context.spawn(ImageBuilderActor(), "ImageBuilderActor")
       //context.watch(imageBuilderActor)  // We don't want to terminate if any exception occurs in Child actors
 
-      val ec2Actor = context.spawn(EC2Actor(), "EC2Actor")
-      //context.watch(ec2Actor)
+      val ec2Actor: ActorRef[EC2Actor.EC2Command] = context.spawn(EC2Actor(ec2Client), "EC2Actor")
+      val vpcActor: ActorRef[VPCActor.VPCCommand] = context.spawn(VPCActor(ec2Client), "VPCActor")
+      val subnetActor: ActorRef[SubnetActor.SubnetCommand] = context.spawn(SubnetActor(ec2Client, vpcActor), "SubnetActor")
 
-      val routes = new Routes(imageBuilderActor, ec2Actor)(context.system)
+      val routes: Routes = new Routes(imageBuilderActor, ec2Actor, vpcActor, subnetActor)(context.system)
       startHttpServer(routes.routes, context.system)
 
       Behaviors.empty

@@ -46,7 +46,7 @@ trait ApiMessages {
     val s = Source.fromURL(getClass.getClassLoader.getResource("git.properties"))
     try {
       JsonParser(s.getLines.mkString).prettyPrint
-    } finally{
+    } finally {
       s.close
     }
   }(system.executionContext)

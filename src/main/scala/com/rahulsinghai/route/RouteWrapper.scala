@@ -5,7 +5,7 @@ import java.security.SecureRandom
 import akka.http.scaladsl.coding.Gzip
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.server.RouteResult.{Complete, Rejected}
+import akka.http.scaladsl.server.RouteResult.{ Complete, Rejected }
 import akka.http.scaladsl.server._
 import akka.pattern.AskTimeoutException
 import akka.stream.scaladsl.Flow
@@ -17,7 +17,7 @@ import com.typesafe.scalalogging.StrictLogging
 import org.apache.commons.codec.binary.Hex
 
 import scala.concurrent.ExecutionContext
-import scala.util.{Failure, Success, Try}
+import scala.util.{ Failure, Success, Try }
 
 trait RouteWrapper extends StrictLogging {
 

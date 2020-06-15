@@ -9,15 +9,14 @@ import akka.util.Timeout
 import ch.megard.akka.http.cors.scaladsl.model.HttpOriginMatcher
 import com.amazonaws.auth.BasicAWSCredentials
 import com.amazonaws.regions.Regions
-import com.typesafe.config.{Config, ConfigFactory}
+import com.typesafe.config.{ Config, ConfigFactory }
 import com.typesafe.scalalogging.StrictLogging
 
-import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.duration.{ Duration, FiniteDuration }
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 object AWSToolkitConfig extends StrictLogging {
-
 
   def getPotentiallyInfiniteDuration(durationString: String): FiniteDuration = {
     val durationObject = durationString match {
@@ -29,7 +28,6 @@ object AWSToolkitConfig extends StrictLogging {
 
   private lazy val httpMethodMap: Map[String, HttpMethod] = Map("CONNECT" -> CONNECT, "DELETE" -> DELETE, "GET" -> GET, "HEAD" -> HEAD,
     "OPTIONS" -> OPTIONS, "PATCH" -> PATCH, "POST" -> POST, "PUT" -> PUT, "TRACE" -> TRACE)
-
 
   lazy val config: Config = ConfigFactory.load
 
@@ -49,6 +47,5 @@ object AWSToolkitConfig extends StrictLogging {
 
   lazy val corsAllowedOrigins: HttpOriginMatcher = Try(HttpOriginMatcher(HttpOrigin(config.getString("cors.allowed-origins")))).getOrElse(HttpOriginMatcher.*)
   lazy val corsAllowedMethods: List[HttpMethod] = Try(config.getStringList("cors.allowed-methods").asScala.toList
-    .map(y => httpMethodMap.getOrElse(y.toUpperCase, GET))
-  ).getOrElse(List(GET))
+    .map(y => httpMethodMap.getOrElse(y.toUpperCase, GET))).getOrElse(List(GET))
 }

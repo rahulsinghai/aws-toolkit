@@ -3,10 +3,8 @@ package com.rahulsinghai.actor
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ ActorRef, Behavior, SupervisorStrategy }
 import com.amazonaws.AmazonServiceException
-import com.amazonaws.auth.AWSStaticCredentialsProvider
 import com.amazonaws.services.ec2.model._
-import com.amazonaws.services.ec2.{ AmazonEC2, AmazonEC2ClientBuilder }
-import com.rahulsinghai.conf.AWSToolkitConfig
+import com.amazonaws.services.ec2.AmazonEC2
 import com.rahulsinghai.model.InstanceToCreate
 
 import scala.jdk.CollectionConverters._
@@ -25,18 +23,12 @@ object EC2Actor {
   case class RebootEC2Instance(instanceId: String, replyTo: ActorRef[EC2Response]) extends EC2Command
   case class StopEC2Instance(instanceId: String, replyTo: ActorRef[EC2Response]) extends EC2Command
 
-  // Set up the Amazon ec2 client
-  val ec2Client: AmazonEC2 = AmazonEC2ClientBuilder.standard()
-    .withCredentials(new AWSStaticCredentialsProvider(AWSToolkitConfig.awsCredentials))
-    .withRegion(AWSToolkitConfig.region)
-    .build
-
-  def apply(): Behavior[EC2Command] =
+  def apply(ec2Client: AmazonEC2): Behavior[EC2Command] =
     Behaviors
-      .supervise(Behaviors.supervise(behaviour(None)).onFailure[IllegalStateException](SupervisorStrategy.resume)) // Ignore the failure and process the next message, instead:
+      .supervise(Behaviors.supervise(behaviour(ec2Client, None)).onFailure[IllegalStateException](SupervisorStrategy.resume)) // Ignore the failure and process the next message, instead:
       .onFailure[AmazonServiceException](SupervisorStrategy.resume)
 
-  private def behaviour(instanceIdOption: Option[String]): Behavior[EC2Command] =
+  private def behaviour(ec2Client: AmazonEC2, instanceIdOption: Option[String]): Behavior[EC2Command] =
     Behaviors.receive { (context, message) =>
       message match {
         case CreateEC2Instance(_, replyTo) if instanceIdOption.isDefined =>
@@ -69,6 +61,7 @@ object EC2Actor {
                 .headOption
               var state: Option[String] = instanceOption.flatMap(x => Option(x.getState.getName))
 
+              // Wait for instance to get up running
               val checkInterval: Long = 5000L
               while (state.contains(InstanceStateName.Pending.toString)) {
                 Thread.sleep(checkInterval)
@@ -96,7 +89,7 @@ object EC2Actor {
               val description: String = s"Successfully created EC2 instance: ${instanceToCreate.nameTag} with instanceId: $instanceId, private IP: $privateIP, public IP: $publicIP based on AMI: ${instanceToCreate.imageId}."
               context.log.info(description)
               replyTo ! EC2SuccessResponse(description)
-              behaviour(Some(instanceId))
+              behaviour(ec2Client, Some(instanceId))
 
             case Failure(f) =>
               replyTo ! EC2FailureResponse(f)
@@ -108,7 +101,8 @@ object EC2Actor {
           val startInstancesRequest: StartInstancesRequest = new StartInstancesRequest().withInstanceIds(instanceId)
           Try(ec2Client.startInstances(startInstancesRequest)) match {
             case Success(startInstancesResult) =>
-              val description: String = s"EC2 Instance with instanceId: $instanceId started!"
+              val description: String = s"Start EC2 Instance with instanceId: $instanceId result: ${startInstancesResult.toString}"
+              context.log.info(description)
               replyTo ! EC2SuccessResponse(description)
               Behaviors.same
 
@@ -121,26 +115,39 @@ object EC2Actor {
           val rebootInstancesRequest: RebootInstancesRequest = new RebootInstancesRequest()
             .withInstanceIds(instanceId)
 
-          val rebootInstancesResult: RebootInstancesResult = ec2Client.rebootInstances(rebootInstancesRequest)
-          val description: String = s"Reboot EC2 Instance (instanceId: $instanceId) result: ${rebootInstancesResult.toString}"
-          context.log.info(description)
-          replyTo ! EC2SuccessResponse(description)
-          Behaviors.same
+          Try(ec2Client.rebootInstances(rebootInstancesRequest)) match {
+            case Success(rebootInstancesResult) =>
+              val description: String = s"Reboot EC2 Instance (instanceId: $instanceId) result: ${rebootInstancesResult.toString}"
+              context.log.info(description)
+              replyTo ! EC2SuccessResponse(description)
+              Behaviors.same
+
+            case Failure(f) =>
+              replyTo ! EC2FailureResponse(f)
+              Behaviors.same
+          }
 
         case StopEC2Instance(instanceId, replyTo) =>
           val stopInstancesRequest: StopInstancesRequest = new StopInstancesRequest()
             .withInstanceIds(instanceId)
 
-          val stoppedInstanceName: String = ec2Client.stopInstances(stopInstancesRequest)
-            .getStoppingInstances
-            .get(0)
-            .getPreviousState
-            .getName
+          Try(ec2Client.stopInstances(stopInstancesRequest)) match {
+            case Success(stopInstancesResult) =>
+              val stoppedInstanceName: String = ec2Client.stopInstances(stopInstancesRequest)
+                .getStoppingInstances
+                .get(0)
+                .getPreviousState
+                .getName
 
-          val description: String = s"Stop EC2 Instance (instanceId: $instanceId) name: $stoppedInstanceName"
-          context.log.info(description)
-          replyTo ! EC2SuccessResponse(description)
-          Behaviors.same
+              val description: String = s"Stop EC2 Instance (instanceId: $instanceId), name: $stoppedInstanceName, result: ${stopInstancesResult.toString}"
+              context.log.info(description)
+              replyTo ! EC2SuccessResponse(description)
+              Behaviors.same
+
+            case Failure(f) =>
+              replyTo ! EC2FailureResponse(f)
+              Behaviors.same
+          }
       }
     }
 }
