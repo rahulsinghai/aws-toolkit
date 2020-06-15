@@ -3,7 +3,7 @@ package com.rahulsinghai.model
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import com.amazonaws.services.ec2.model.InstanceType
 import com.rahulsinghai.actor.EC2Actor._
-import com.rahulsinghai.actor.ImageBuilderActor.AMIActionPerformed
+import com.rahulsinghai.actor.ImageBuilderActor.AMISuccessResponse
 import com.rahulsinghai.actor.SubnetActor.SubnetSuccessResponse
 import com.rahulsinghai.actor.VPCActor.VPCSuccessResponse
 import spray.json._
@@ -20,7 +20,7 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
 
   implicit val instancesToCreateJsonFormat: RootJsonFormat[InstancesToCreate] = jsonFormat1(InstancesToCreate)
 
-  implicit val amiActionPerformedJsonFormat: RootJsonFormat[AMIActionPerformed] = jsonFormat1(AMIActionPerformed)
+  implicit val amiActionPerformedJsonFormat: RootJsonFormat[AMISuccessResponse] = jsonFormat1(AMISuccessResponse)
 
   implicit val ec2SuccessResponseJsonFormat: RootJsonFormat[EC2SuccessResponse] = jsonFormat1(EC2SuccessResponse)
 

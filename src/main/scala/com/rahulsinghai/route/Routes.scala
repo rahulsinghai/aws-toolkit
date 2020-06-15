@@ -12,10 +12,10 @@ import akka.http.scaladsl.server.{RequestContext, Route, RouteResult}
 import akka.util.Timeout
 import com.amazonaws.services.ec2.model.InstanceType
 import com.rahulsinghai.actor.EC2Actor._
-import com.rahulsinghai.actor.ImageBuilderActor.{AMIActionPerformed, ListImages}
-import com.rahulsinghai.actor.SubnetActor.{CreateSubnet, SubnetFailureResponse, SubnetResponse, SubnetSuccessResponse}
-import com.rahulsinghai.actor.VPCActor.{CreateVpc, VPCFailureResponse, VPCResponse, VPCSuccessResponse}
-import com.rahulsinghai.actor.{EC2Actor, ImageBuilderActor, SubnetActor, VPCActor}
+import com.rahulsinghai.actor.ImageBuilderActor._
+import com.rahulsinghai.actor.SubnetActor._
+import com.rahulsinghai.actor.VPCActor._
+import com.rahulsinghai.actor._
 import com.rahulsinghai.conf.AWSToolkitConfig
 import com.rahulsinghai.model._
 import com.rahulsinghai.util.ApiMessages
@@ -35,23 +35,27 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
   // If ask takes more time than this to complete the request is failed
   private implicit val timeout: Timeout = AWSToolkitConfig.akkaHttpServerRequestTimeout
 
-  def listAMIs(): Future[AMIActionPerformed] = imageBuilderActor.ask(ListImages)
+  def listAMIs(owner: String): Future[AMISuccessResponse] =
+    imageBuilderActor.ask[AMIResponse](ListImages(owner, _)).flatMap {
+      case AMIFailureResponse(throwable)          => Future.failed(throwable) // https://doc.akka.io/docs/akka/current/typed/interaction-patterns.html#request-response-with-ask-from-outside-an-actor
+      case amiSuccessResponse: AMISuccessResponse => Future.successful(amiSuccessResponse)
+    }
 
   def createSubnet(subnetToCreate: SubnetToCreate): Future[SubnetSuccessResponse] =
     subnetActor.ask[SubnetResponse](CreateSubnet(subnetToCreate, _)).flatMap {
-      case SubnetFailureResponse(throwable)          => Future.failed(throwable) // https://doc.akka.io/docs/akka/current/typed/interaction-patterns.html#request-response-with-ask-from-outside-an-actor
+      case SubnetFailureResponse(throwable)          => Future.failed(throwable)
       case subnetSuccessResponse: SubnetSuccessResponse => Future.successful(subnetSuccessResponse)
     }
 
   def createVPC(vpcToCreate: VpcToCreate): Future[VPCSuccessResponse] =
     vpcActor.ask[VPCResponse](CreateVpc(vpcToCreate, _)).flatMap {
-      case VPCFailureResponse(throwable)          => Future.failed(throwable) // https://doc.akka.io/docs/akka/current/typed/interaction-patterns.html#request-response-with-ask-from-outside-an-actor
+      case VPCFailureResponse(throwable)          => Future.failed(throwable)
       case vpcSuccessResponse: VPCSuccessResponse => Future.successful(vpcSuccessResponse)
     }
 
   def createEC2Instance(instanceToCreate: InstanceToCreate): Future[EC2SuccessResponse] =
     ec2Actor.ask[EC2Response](CreateEC2Instance(instanceToCreate, _)).flatMap {
-      case EC2FailureResponse(throwable)          => Future.failed(throwable) // https://doc.akka.io/docs/akka/current/typed/interaction-patterns.html#request-response-with-ask-from-outside-an-actor
+      case EC2FailureResponse(throwable)          => Future.failed(throwable)
       case ec2SuccessResponse: EC2SuccessResponse => Future.successful(ec2SuccessResponse)
     }
 
@@ -76,8 +80,7 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
   // Akka HTTP caching. Default settings are defined in application.conf
   // Use the request's URI as the cache's key
   val keyerFunction: PartialFunction[RequestContext, Uri] = {
-    case r: RequestContext =>
-      r.request.uri
+    case r: RequestContext => r.request.uri
   }
 
   // Frequency-biased LFU cache will evict an entry which hasn’t been used recently or very often.
@@ -145,22 +148,44 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
         concat(
           authenticateBasicPF(realm = "Big Data TLL user area", userPassAuthenticator) { _: String =>
             path("list") {
-              concat(
-                cache(lfuRouteCache, keyerFunction)(
-                  get {
-                    val listAMIsFuture: Future[AMIActionPerformed] = listAMIs()
-                    onComplete(listAMIsFuture) {
-                      case Success(actionPerformed: AMIActionPerformed) =>
-                        logger.info(s"These AMIs exist: ${actionPerformed.description}")
-                        complete((StatusCodes.OK, actionPerformed))
-                      case Failure(t: Throwable) =>
-                        val failureMessage: String = s"List images operation failed!\n${t.getLocalizedMessage}"
-                        logger.error(failureMessage, t)
-                        complete((StatusCodes.InternalServerError, failureMessage))
+              concat {
+                parameters("owner" ? "Self") { owner =>
+                  cache(lfuRouteCache, keyerFunction)(
+                    get {
+                      val amiResponseFuture: Future[AMISuccessResponse] = listAMIs(owner)
+                      onComplete(amiResponseFuture) {
+                        case Success(amiSuccessResponse: AMISuccessResponse) =>
+                          logger.info(amiSuccessResponse.description)
+                          complete((StatusCodes.OK, amiSuccessResponse))
+                        case Failure(t: Throwable) =>
+                          val failureMessage: String = s"List images operation failed!\n${t.getLocalizedMessage}"
+                          logger.error(failureMessage, t)
+                          complete((StatusCodes.InternalServerError, failureMessage))
+                      }
                     }
-                  }
-                )
-              )
+                  )
+                }
+              }
+            } ~
+            path("create") {
+              concat {
+                parameters("owner" ? "Self") { owner =>
+                  cache(lfuRouteCache, keyerFunction)(
+                    get {
+                      val amiResponseFuture: Future[AMISuccessResponse] = listAMIs(owner)
+                      onComplete(amiResponseFuture) {
+                        case Success(amiSuccessResponse: AMISuccessResponse) =>
+                          logger.info(amiSuccessResponse.description)
+                          complete((StatusCodes.OK, amiSuccessResponse))
+                        case Failure(t: Throwable) =>
+                          val failureMessage: String = s"Create image operation failed!\n${t.getLocalizedMessage}"
+                          logger.error(failureMessage, t)
+                          complete((StatusCodes.InternalServerError, failureMessage))
+                      }
+                    }
+                  )
+                }
+              }
             }
           }
         )
@@ -315,7 +340,7 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
         </ul>
         <br/>
         <ul>
-          <li>List AMIs: <a href="/ami/list">/ami/list</a></li>
+          <li>List AMIs: <a href="/ami/list?owner=Self">/ami/list?owner=Self</a></li>
           <li>Create new AMI (idempotent): <a href="/ami/create?">/ami/create?</a></li>
         </ul>
         <br/>

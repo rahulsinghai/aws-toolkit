@@ -33,8 +33,8 @@ trait ApiMessages {
         val diff = rest - timeUnit.convert(res, unit)
         (str, diff)
     }
-    val humanReadableTime = humanReadableTimeTuple._1.trim
-    humanReadableTime
+    val humanReadableTimeString = humanReadableTimeTuple._1
+    humanReadableTimeString.trim
   }
 
   def getCurrentStatus: Future[String] = Future {
