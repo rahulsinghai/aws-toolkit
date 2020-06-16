@@ -1,11 +1,11 @@
 package com.rahulsinghai.actor
 
 import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
+import akka.actor.typed.{ ActorRef, Behavior, SupervisorStrategy }
 import com.amazonaws.AmazonServiceException
 import com.amazonaws.auth.AWSStaticCredentialsProvider
-import com.amazonaws.services.imagebuilder.model.{ListImagesRequest, ListImagesResult}
-import com.amazonaws.services.imagebuilder.{AWSimagebuilder, AWSimagebuilderClientBuilder}
+import com.amazonaws.services.imagebuilder.model.{ ListImagesRequest, ListImagesResult }
+import com.amazonaws.services.imagebuilder.{ AWSimagebuilder, AWSimagebuilderClientBuilder }
 import com.rahulsinghai.conf.AWSToolkitConfig
 
 import scala.jdk.CollectionConverters._

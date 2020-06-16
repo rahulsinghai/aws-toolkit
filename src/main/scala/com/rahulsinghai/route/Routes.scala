@@ -1,14 +1,14 @@
 package com.rahulsinghai.route
 
 import akka.actor.typed.scaladsl.AskPattern._
-import akka.actor.typed.{ActorRef, ActorSystem}
+import akka.actor.typed.{ ActorRef, ActorSystem }
 import akka.http.caching.scaladsl.Cache
-import akka.http.scaladsl.model.{StatusCodes, _}
-import akka.http.scaladsl.server.Directives.{complete, parameters, _}
+import akka.http.scaladsl.model.{ StatusCodes, _ }
+import akka.http.scaladsl.server.Directives.{ complete, parameters, _ }
 import akka.http.scaladsl.server.directives.CachingDirectives._
 import akka.http.scaladsl.server.directives.Credentials
 import akka.http.scaladsl.server.directives.PathDirectives.path
-import akka.http.scaladsl.server.{RequestContext, Route, RouteResult}
+import akka.http.scaladsl.server.{ RequestContext, Route, RouteResult }
 import akka.util.Timeout
 import com.amazonaws.services.ec2.model.InstanceType
 import com.rahulsinghai.actor.EC2Actor._
@@ -21,8 +21,8 @@ import com.rahulsinghai.model._
 import com.rahulsinghai.util.ApiMessages
 import com.typesafe.scalalogging.StrictLogging
 
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
+import scala.concurrent.{ ExecutionContext, Future }
+import scala.util.{ Failure, Success, Try }
 import scala.xml.Elem
 
 class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand], ec2Actor: ActorRef[EC2Actor.EC2Command],
@@ -43,7 +43,7 @@ class Routes(imageBuilderActor: ActorRef[ImageBuilderActor.ImageBuilderCommand],
 
   def createSubnet(subnetToCreate: SubnetToCreate): Future[SubnetSuccessResponse] =
     subnetActor.ask[SubnetResponse](CreateSubnet(subnetToCreate, _)).flatMap {
-      case SubnetFailureResponse(throwable)          => Future.failed(throwable)
+      case SubnetFailureResponse(throwable)             => Future.failed(throwable)
       case subnetSuccessResponse: SubnetSuccessResponse => Future.successful(subnetSuccessResponse)
     }
 

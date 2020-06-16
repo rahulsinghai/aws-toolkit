@@ -2,19 +2,19 @@ package com.rahulsinghai
 
 import java.net.InetSocketAddress
 
-import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
+import akka.actor.typed.{ ActorRef, ActorSystem, Behavior }
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.scaladsl.adapter._
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Route
 import com.amazonaws.auth.AWSStaticCredentialsProvider
-import com.amazonaws.services.ec2.{AmazonEC2, AmazonEC2ClientBuilder}
-import com.rahulsinghai.actor.{EC2Actor, ImageBuilderActor, SubnetActor, VPCActor}
+import com.amazonaws.services.ec2.{ AmazonEC2, AmazonEC2ClientBuilder }
+import com.rahulsinghai.actor.{ EC2Actor, ImageBuilderActor, SubnetActor, VPCActor }
 import com.rahulsinghai.conf.AWSToolkitConfig
 import com.rahulsinghai.route.Routes
 
 import scala.concurrent.Future
-import scala.util.{Failure, Success}
+import scala.util.{ Failure, Success }
 
 //#main-class
 object AWSToolkitApp {

@@ -1,14 +1,14 @@
 package com.rahulsinghai.actor
 
 import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
+import akka.actor.typed.{ ActorRef, Behavior, SupervisorStrategy }
 import com.amazonaws.AmazonServiceException
 import com.amazonaws.services.ec2.AmazonEC2
 import com.amazonaws.services.ec2.model._
 import com.rahulsinghai.model.VpcToCreate
 
 import scala.jdk.CollectionConverters._
-import scala.util.{Failure, Success, Try}
+import scala.util.{ Failure, Success, Try }
 
 object VPCActor {
   // actor protocol
@@ -34,7 +34,7 @@ object VPCActor {
           Try(ec2Client.describeVpcs(describeVpcsRequest)) match {
             case Success(describeVpcsResult: DescribeVpcsResult) =>
               val vpcs: List[Vpc] = describeVpcsResult.getVpcs.asScala.toList
-              if(vpcs.nonEmpty) {
+              if (vpcs.nonEmpty) {
                 val vpcIdOption: Option[String] = vpcs.headOption.flatMap(x => Option(x.getVpcId))
                 val description: String = s"VPC found with nameTag: $nameTag; has vpcId: ${vpcIdOption.getOrElse("")}."
                 context.log.info(description)
@@ -62,7 +62,7 @@ object VPCActor {
           Try(ec2Client.describeVpcs(describeVpcsRequest)) match {
             case Success(describeVpcsResult: DescribeVpcsResult) =>
               val vpcs: List[Vpc] = describeVpcsResult.getVpcs.asScala.toList
-              if(vpcs.nonEmpty) {
+              if (vpcs.nonEmpty) {
                 val vpcIdOption: Option[String] = vpcs.headOption.flatMap(x => Option(x.getVpcId))
                 val description: String = s"VPC already exist with vpcId: ${vpcIdOption.getOrElse("")}."
                 context.log.info(description)

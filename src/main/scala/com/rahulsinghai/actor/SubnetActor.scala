@@ -1,7 +1,7 @@
 package com.rahulsinghai.actor
 
 import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
+import akka.actor.typed.{ ActorRef, Behavior, SupervisorStrategy }
 import com.amazonaws.AmazonServiceException
 import com.amazonaws.services.ec2.AmazonEC2
 import com.amazonaws.services.ec2.model._
@@ -9,7 +9,7 @@ import com.rahulsinghai.actor.VPCActor.VPCCommand
 import com.rahulsinghai.model.SubnetToCreate
 
 import scala.jdk.CollectionConverters._
-import scala.util.{Failure, Success, Try}
+import scala.util.{ Failure, Success, Try }
 
 object SubnetActor {
   // actor protocol
@@ -43,7 +43,7 @@ object SubnetActor {
             case Success(describeSubnetsResult: DescribeSubnetsResult) =>
 
               val subnets: List[Subnet] = describeSubnetsResult.getSubnets.asScala.toList
-              if(subnets.nonEmpty) {
+              if (subnets.nonEmpty) {
                 // Subnet already exists
                 val subnetIdOption: Option[String] = subnets.headOption.flatMap(x => Option(x.getSubnetId))
                 val description: String = s"Subnet already exist with subnetId: ${subnetIdOption.getOrElse("")}."
